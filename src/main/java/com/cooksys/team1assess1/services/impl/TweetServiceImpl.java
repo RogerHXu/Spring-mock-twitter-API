@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,9 +51,12 @@ public class TweetServiceImpl implements TweetService {
 		tweet.setContent(tweetRequestDto.getContent());
 		User user = userRepository.findByCredentials(credentialsMapper.dtoToEntity(tweetRequestDto.getCredentials()));
 		if(user == null) throw new NotAuthorizedException("No user with matching credentials found");
-		tweet.setAuthor(user);
 		if(tweet.getContent() == null || tweet.getInReplyTo() != null || tweet.getRepostOf() != null) throw new BadRequestException("Invalid body");
-		setMentionsAndTags(tweet);
+		tweet.setAuthor(user);
+		setMentionsAndTagsAndSave(tweet);
+		if(user.getTweets() == null) user.setTweets(new ArrayList<Tweet>());
+		user.getTweets().add(tweet);
+		userRepository.saveAndFlush(user);
 		return tweetMapper.entityToDto(tweet);
 	}
 
@@ -155,7 +159,7 @@ public class TweetServiceImpl implements TweetService {
 		reply.setAuthor(user);
 		reply.setInReplyTo(OGtweet);
 		reply.setContent(OGtweet.getContent());
-		setMentionsAndTags(reply);
+		setMentionsAndTagsAndSave(reply);
 		OGtweet.getRepliedBy().add(reply);
 		return tweetMapper.entityToDto(reply);
 	}
@@ -202,21 +206,33 @@ public class TweetServiceImpl implements TweetService {
         return replies;
 	}
 
-	private void setMentionsAndTags(Tweet tweet){
+	private void setMentionsAndTagsAndSave(Tweet tweet){
+		tweet.setMentions(new ArrayList<>());
+		tweet.setHashtags(new ArrayList<>());
 		Pattern mentionPat = Pattern.compile("@\\w+");
 		Matcher userMatcher = mentionPat.matcher(tweet.getContent());
 		while(userMatcher.find()) {
-			User mentionedUser = userRepository.findByCredentialsUsername(userMatcher.group(1));
+			User mentionedUser = userRepository.findByCredentialsUsername(userMatcher.group(0));
 			if(mentionedUser != null)
 				tweet.getMentions().add(mentionedUser);
 		}
-		Pattern tagPat = Pattern.compile("#\\w+");
-		Matcher tagMatcher = tagPat.matcher(tweet.getContent());
-		while(tagMatcher.find()){
+		String[] labels = Pattern.compile("#\\w+")
+				.matcher(tweet.getContent())
+				.results()
+				.map(MatchResult::group)
+				.toArray(String[]::new);
+
+		for(String label : labels){
+			label = label.substring(1);
 			Hashtag hashtag;
-			if(!hashtagRepository.existsByLabel(tagMatcher.group(1))) hashtag = new Hashtag();
-			else hashtag = hashtagRepository.findByLabel(tagMatcher.group(1));
+			if(!hashtagRepository.existsByLabel(label)) {
+				hashtag = new Hashtag();
+				hashtag.setLabel(label);
+			}
+			else hashtag = hashtagRepository.findByLabel(label);
+			if(hashtag.getTweets() == null) hashtag.setTweets(new ArrayList<>());
 			hashtag.getTweets().add(tweet);
+			System.out.println(hashtag.getLabel());
 			tweet.getHashtags().add(hashtag);
 		}
 		tweetRepository.saveAndFlush(tweet);
