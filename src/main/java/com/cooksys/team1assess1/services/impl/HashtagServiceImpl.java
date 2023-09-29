@@ -3,6 +3,7 @@ package com.cooksys.team1assess1.services.impl;
 import java.util.List;
 
 import com.cooksys.team1assess1.entities.Tweet;
+import com.cooksys.team1assess1.exceptions.NotFoundException;
 import org.springframework.stereotype.Service;
 
 import com.cooksys.team1assess1.entities.Hashtag;
@@ -23,7 +24,9 @@ public class HashtagServiceImpl implements HashtagService {
 
 	@Override
 	public List<Tweet> getTweetsWithTag(String label) {
-		return hashtagRepository.findByLabel(label).getTweets();
+		Hashtag hashtag = hashtagRepository.findByLabel(label)
+				.orElseThrow(() -> new NotFoundException("Tweet not found."));
+		return hashtag.getTweets();
 	}
 
 }

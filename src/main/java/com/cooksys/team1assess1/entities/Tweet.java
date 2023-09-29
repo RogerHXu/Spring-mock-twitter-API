@@ -1,9 +1,11 @@
 package com.cooksys.team1assess1.entities;
 
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
-
 import java.sql.Timestamp;
 import java.util.List;
 
@@ -46,6 +48,7 @@ public class Tweet {
             name = "user_likes",
             joinColumns = @JoinColumn(name = "tweet_id"),
             inverseJoinColumns = @JoinColumn(name = "user_id"))
+    @JsonIgnore
     private List<User> likes;
 
     @ManyToMany
@@ -53,6 +56,7 @@ public class Tweet {
             name = "user_mentions",
             joinColumns = @JoinColumn(name = "tweet_id"),
             inverseJoinColumns = @JoinColumn(name = "user_id"))
+    @JsonIgnore
     private List<User> mentions;
 
     @ManyToMany(mappedBy = "tweets")

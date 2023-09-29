@@ -21,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Matcher;
+import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
@@ -50,9 +50,15 @@ public class TweetServiceImpl implements TweetService {
 		tweet.setContent(tweetRequestDto.getContent());
 		User user = userRepository.findByCredentials(credentialsMapper.dtoToEntity(tweetRequestDto.getCredentials()));
 		if(user == null) throw new NotAuthorizedException("No user with matching credentials found");
-		tweet.setAuthor(user);
 		if(tweet.getContent() == null || tweet.getInReplyTo() != null || tweet.getRepostOf() != null) throw new BadRequestException("Invalid body");
-		setMentionsAndTags(tweet);
+		tweet.setAuthor(user);
+		setMentionsAndTagsAndSave(tweet);
+		for(Hashtag h : tweet.getHashtags()){
+			System.out.println(h.getLabel());
+		}
+		if(user.getTweets() == null) user.setTweets(new ArrayList<Tweet>());
+		user.getTweets().add(tweet);
+		userRepository.saveAndFlush(user);
 		return tweetMapper.entityToDto(tweet);
 	}
 
@@ -69,7 +75,7 @@ public class TweetServiceImpl implements TweetService {
 		Tweet tweet = tweetRepository.findById(id)
 				.orElseThrow(() -> new NotFoundException("No tweet with given id"));
 		if(tweet.isDeleted()) throw new NotFoundException("The tweet you are looking for has already been deleted");
-		if(tweet.getAuthor().getCredentials() != credentialsMapper.dtoToEntity(credentialsDto)) throw new NotAuthorizedException("Invalid credentials");
+		if(!tweet.getAuthor().getCredentials().equals(credentialsMapper.dtoToEntity(credentialsDto))) throw new NotAuthorizedException("Invalid credentials");
 		tweet.setDeleted(true);
 		tweetRepository.saveAndFlush(tweet);
 		return tweetMapper.entityToDto(tweet);
@@ -134,14 +140,13 @@ public class TweetServiceImpl implements TweetService {
 		Tweet tweet = tweetRepository.findById(id)
 				.orElseThrow(() -> new NotFoundException("No tweet with given id"));
 		if(tweet.isDeleted()) throw new NotFoundException("The tweet you are looking for has already been deleted");
-		if(tweet.getAuthor().getCredentials() != credentialsMapper.dtoToEntity(credentialsDto)) throw new NotAuthorizedException("Invalid credentials");
 		User user = userRepository.findByCredentials(credentialsMapper.dtoToEntity(credentialsDto));
 		if(user == null) throw new NotFoundException("The user doesn't exist");
-		tweet.getLikes().add(user);
+		if(user.getLikedTweets().contains(tweet)) return;
 		user.getLikedTweets().add(tweet);
-		tweetRepository.saveAndFlush(tweet);
+		tweet.getLikes().add(user);
 		userRepository.saveAndFlush(user);
-		return;
+		tweetRepository.saveAndFlush(tweet);
 	}
 
 	@Override
@@ -154,8 +159,8 @@ public class TweetServiceImpl implements TweetService {
 		Tweet reply = new Tweet();
 		reply.setAuthor(user);
 		reply.setInReplyTo(OGtweet);
-		reply.setContent(OGtweet.getContent());
-		setMentionsAndTags(reply);
+		reply.setContent(tweetRequestDto.getContent());
+		setMentionsAndTagsAndSave(reply);
 		OGtweet.getRepliedBy().add(reply);
 		return tweetMapper.entityToDto(reply);
 	}
@@ -202,24 +207,46 @@ public class TweetServiceImpl implements TweetService {
         return replies;
 	}
 
-	private void setMentionsAndTags(Tweet tweet){
-		Pattern mentionPat = Pattern.compile("@\\w+");
-		Matcher userMatcher = mentionPat.matcher(tweet.getContent());
-		while(userMatcher.find()) {
-			User mentionedUser = userRepository.findByCredentialsUsername(userMatcher.group(1));
-			if(mentionedUser != null)
+	private void setMentionsAndTagsAndSave(Tweet tweet){
+		tweet.setMentions(new ArrayList<>());
+		String[] mentions = Pattern.compile("@\\w+")
+				.matcher(tweet.getContent())
+				.results()
+				.map(MatchResult::group)
+				.toArray(String[]::new);
+
+		for (String mention : mentions) {
+			mention = mention.substring(1);
+			System.out.println(mention);
+			User mentionedUser = userRepository.findByCredentialsUsername(mention);
+			if (mentionedUser != null) {
 				tweet.getMentions().add(mentionedUser);
+				mentionedUser.getMentionedBy().add(tweet);
+			}
 		}
-		Pattern tagPat = Pattern.compile("#\\w+");
-		Matcher tagMatcher = tagPat.matcher(tweet.getContent());
-		while(tagMatcher.find()){
-			Hashtag hashtag;
-			if(!hashtagRepository.existsByLabel(tagMatcher.group(1))) hashtag = new Hashtag();
-			else hashtag = hashtagRepository.findByLabel(tagMatcher.group(1));
-			hashtag.getTweets().add(tweet);
+		//tweetRepository.saveAndFlush(tweet);
+		String[] labels = Pattern.compile("#\\w+")
+				.matcher(tweet.getContent())
+				.results()
+				.map(MatchResult::group)
+				.toArray(String[]::new);
+
+		tweet.setHashtags(new ArrayList<>());
+		for(String label : labels){
+			Hashtag hashtag = new Hashtag();
+			label = label.substring(1);
+			Optional<Hashtag> existingHashtag = hashtagRepository.findByLabel(label);
+			if(existingHashtag.isPresent()) {
+				hashtag = existingHashtag.get();
+			} else {
+				hashtag.setLabel(label);
+			}
+			if(hashtag.getTweets() == null) hashtag.setTweets(new ArrayList<>());
 			tweet.getHashtags().add(hashtag);
+			hashtag.getTweets().add(tweet);
 		}
 		tweetRepository.saveAndFlush(tweet);
+		hashtagRepository.saveAllAndFlush(tweet.getHashtags());
 	}
 
 }

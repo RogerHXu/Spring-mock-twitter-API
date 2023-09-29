@@ -1,5 +1,8 @@
 package com.cooksys.team1assess1.entities;
 
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.sql.Timestamp;
@@ -31,5 +34,6 @@ public class Hashtag {
             name = "tweet_hashtags",
             joinColumns = @JoinColumn(name = "hashtag_id"),
             inverseJoinColumns = @JoinColumn(name = "tweet_id"))
+    @JsonIgnore
     private List<Tweet> tweets;
 }

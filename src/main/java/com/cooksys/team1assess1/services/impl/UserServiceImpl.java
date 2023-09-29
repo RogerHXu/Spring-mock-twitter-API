@@ -28,7 +28,7 @@ public class UserServiceImpl implements UserService {
 	private final UserMapper userMapper;
 	private final TweetMapper tweetMapper;
 	private final CredentialsMapper credentialsMapper;
-	
+
 	@Override
 	public List<TweetResponseDto> getUserFeed(String username) {
 		User user = userRepository.findByCredentialsUsernameAndDeletedFalse(username)
@@ -71,23 +71,18 @@ public class UserServiceImpl implements UserService {
 		}
 
 		String username = userRequestDto.getCredentials().getUsername();
-
-		Optional<User> optionalUser = userRepository.findByCredentialsUsernameAndDeletedFalse(username);
-
-		if (optionalUser.isPresent()) {
-			throw new BadRequestException("Username already taken.");
+		if (userRepository.existsByCredentialsUsername(username)) {
+			User reactivatingUser = userRepository.findByCredentialsUsername(username);
+			if(! reactivatingUser.isDeleted()) throw new BadRequestException("Username already taken.");
+			else {
+				reactivatingUser.setDeleted(false);
+				userRepository.saveAndFlush(reactivatingUser);
+				return userMapper.entityToDto(reactivatingUser);
+			}
 		}
 
 		User user = userMapper.dtoToEntity(userRequestDto);
-
-		if (userRepository.existsByCredentialsUsername(username)) {
-			user.setDeleted(false);
-			userRepository.saveAndFlush(user);
-			return userMapper.entityToDto(user);
-		}
-
 		userRepository.saveAndFlush(user);
-
 		return userMapper.entityToDto(user);
 	}
 
@@ -135,8 +130,9 @@ public class UserServiceImpl implements UserService {
 		User userToUpdate = userRepository.findByCredentialsUsernameAndDeletedFalse(username)
 				.orElseThrow(() -> new NotFoundException("User does not exist or is deleted."));
 
-		User updatedUser = userRepository.findByCredentialsUsernameAndDeletedFalse(credentialsMapper.dtoToEntity(credentialsDto).getUsername())
-				.orElseThrow(() -> new NotFoundException("User does not exist or is deleted."));
+		User updatedUser = userRepository.findByCredentials(credentialsMapper.dtoToEntity(credentialsDto));
+		if(updatedUser == null) throw new NotFoundException("User does not exist or is deleted.");
+				//.orElseThrow(() -> new NotFoundException("User does not exist or is deleted."));
 
 		if (!userToUpdate.getCredentials().equals(updatedUser.getCredentials())) {
 			throw new BadRequestException("Credentials don't match");
@@ -145,6 +141,7 @@ public class UserServiceImpl implements UserService {
 		userToUpdate.setDeleted(true);
 //		userRepository.delete();
 		userRepository.saveAndFlush(userToUpdate);
+
 		return userMapper.entityToDto(userToUpdate);
 	}
 
@@ -218,7 +215,6 @@ public class UserServiceImpl implements UserService {
 		follower.getFollowing().add(followee);
 
 		userRepository.saveAndFlush(follower);
-
 	}
 
 	@Override
@@ -232,13 +228,11 @@ public class UserServiceImpl implements UserService {
 		User followee = userRepository.findByCredentialsUsernameAndDeletedFalse(username)
 				.orElseThrow(() -> new NotFoundException("The user you're trying to follow doesn't exist or is deleted."));
 
-		System.out.println(followee.getFollowers().contains(follower));
 		if (!followee.getFollowers().contains(follower)) {
 			throw new BadRequestException("You're not following that user.");
 		}
 
 		follower.getFollowing().remove(followee);
-
 
 		userRepository.saveAndFlush(follower);
 	}
