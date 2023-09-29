@@ -53,9 +53,6 @@ public class TweetServiceImpl implements TweetService {
 		if(tweet.getContent() == null || tweet.getInReplyTo() != null || tweet.getRepostOf() != null) throw new BadRequestException("Invalid body");
 		tweet.setAuthor(user);
 		setMentionsAndTagsAndSave(tweet);
-		for(Hashtag h : tweet.getHashtags()){
-			System.out.println(h.getLabel());
-		}
 		if(user.getTweets() == null) user.setTweets(new ArrayList<Tweet>());
 		user.getTweets().add(tweet);
 		userRepository.saveAndFlush(user);
@@ -131,7 +128,6 @@ public class TweetServiceImpl implements TweetService {
 		context.setTarget(tweetMapper.entityToDto(target));
 		context.setBefore(tweetMapper.entitiesToDtos(getBefore(target)));
 		context.setAfter(tweetMapper.entitiesToDtos(getAfter(target)));
-
 		return context;
 	}
 
@@ -217,7 +213,6 @@ public class TweetServiceImpl implements TweetService {
 
 		for (String mention : mentions) {
 			mention = mention.substring(1);
-			System.out.println(mention);
 			User mentionedUser = userRepository.findByCredentialsUsername(mention);
 			if (mentionedUser != null) {
 				tweet.getMentions().add(mentionedUser);
